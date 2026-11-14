@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOSBIT</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0b0e11"><link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#0b0e11;--sf:#181a20;--tx:#eaecef;--mu:#848e9c;--ac:#f0b90b;--up:#0ecb81;--dn:#f6465d;--bd:#2b3139;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif}
+header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--bd);gap:8px;flex-wrap:wrap}
+.logo{font-weight:800;font-size:20px;letter-spacing:1px}.logo b{color:var(--ac)}
+nav{display:flex;gap:4px;padding:8px 10px;overflow-x:auto;border-bottom:1px solid var(--bd)}
+nav button{background:none;border:0;color:var(--mu);padding:8px 12px;font-weight:600;border-radius:8px;cursor:pointer;white-space:nowrap}
+nav button.on{background:var(--sf);color:var(--tx)}
+main{padding:12px;max-width:900px;margin:auto}
+.card{background:var(--sf);border-radius:12px;padding:12px;margin-bottom:12px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:9px 4px;border-bottom:1px solid var(--bd);gap:8px;cursor:pointer}
+.row:last-child{border:0}.row small{color:var(--mu);display:block}
+.up{color:var(--up)}.dn{color:var(--dn)}.mu{color:var(--mu)}
+input,select{background:var(--bg);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:10px;width:100%;font-size:14px;margin:4px 0}
+.btn{background:var(--ac);color:#000;border:0;border-radius:8px;padding:10px 14px;font-weight:700;cursor:pointer}
+.btn.g{background:var(--up);color:#fff}.btn.r{background:var(--dn);color:#fff}.btn.s{background:var(--bd);color:var(--tx)}
+.btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+canvas{width:100%;height:140px;display:block}h3{margin:4px 0 8px}
+.tag{font-size:10px;padding:2px 6px;border-radius:6px;background:var(--bd);color:var(--mu);margin-left:4px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:10px;opacity:0;transition:.3s;pointer-events:none;z-index:9}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:16px;z-index:5}
+.modal>div{background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;width:100%;max-width:340px}
+</style></head><body>
+<header><div class="logo">LOS<b>BIT</b> <span class="tag">P2P</span></div><div id="top"></div></header>
+<nav id="nav"></nav><main id="main"></main><div id="toast"></div>
+<div class="modal" id="md"><div id="mb"></div></div>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,createUserWithEmailAndPassword,signInWithEmailAndPassword,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,doc,onSnapshot,setDoc,getDoc,updateDoc,collection,getDocs,increment} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// ====== конфиг Firebase (losbit-98cbb) ======
+const CFG={apiKey:"AIzaSyB0XlqUt8OH2r-vbPcYBTs-gOFHUtq4iXY",authDomain:"losbit-98cbb.firebaseapp.com",projectId:"losbit-98cbb",storageBucket:"losbit-98cbb.firebasestorage.app",messagingSenderId:"824021635880",appId:"1:824021635880:web:9b44bfb55478b22eb7361d"};
+// ============================================
+
+const ADMIN_NICK='adm1n1str4tr0r',EM=n=>n.toLowerCase()+'@losbit.app';
+const app=initializeApp(CFG),auth=getAuth(app),db=getFirestore(app),mref=doc(db,'market','main');
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const MOOD={moon:['🚀 Луна',.03],bull:['📈 Бык',.012],auto:['😐 Авто',0],bear:['📉 Медведь',-.012],crash:['💥 Крах',-.03]};
+const seed=[['MZB','Maze Bank','stock',420],['LFI','LifeInvader','stock',150],['FLC','Fleeca Bank','stock',95],['PSW','Pisswasser','stock',60],['ECO','eCola','stock',45],['AMM','Ammu-Nation','stock',210],['BRV','Bravado','stock',180],['CLK','Cluckin Bell','stock',33],['ADR','Truffade Adder (тачка)','asset',1000000],['YCH','Яхта Galaxy Super','asset',2000000],['PNT','Пентхаус Eclipse','asset',3500000],['GLD','Золото (слиток)','asset',1800]];
+let M=null,U=null,user=null,isAdm=false,view='market',cur=null,uun=null;
+const L=()=>M?Object.values(M.assets).sort((a,b)=>a.t.localeCompare(b.t)||a.s.localeCompare(b.s)):[];
+const A=s=>M&&M.assets[s];
+const fm=n=>'$'+(n>=100?Math.round(n).toLocaleString('ru'):n.toFixed(2));
+const saveM=()=>setDoc(mref,M);
+function toast(t){const e=$('toast');e.textContent=t;e.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(()=>e.style.opacity=0,2200)}
+function mkSeed(){const a={};seed.forEach(x=>a[x[0]]={s:x[0],n:x[1],t:x[2],p:x[3],o:x[3],m:'auto',h:[x[3]]});return{gm:'auto',assets:a}}
+
+onSnapshot(mref,s=>{M=s.exists()?s.data():null;if(M&&!A(cur))cur=L()[0].s;
+ if(view==='market')showMarket(true);else if(view==='p2p')showP2P();else if(view==='port')showPort()});
+onAuthStateChanged(auth,u=>{user=u;isAdm=!!u&&u.email===EM(ADMIN_NICK);U=null;if(uun){uun();uun=null}
+ if(u)uun=onSnapshot(doc(db,'users',u.uid),s=>{U=s.exists()?s.data():null;if(!s.exists()&&isAdm)setDoc(doc(db,'users',u.uid),{name:'Админ',cash:100000,hold:{}});renderTop();if(view==='port')showPort()});
+ if(isAdm)getDoc(mref).then(s=>{if(!s.exists()){M=mkSeed();saveM()}});
+ renderTop();go(view==='admin'&&!isAdm?'market':view)});
+// цены двигает только страница админа (пока он залогинен и вкладка открыта)
+setInterval(()=>{if(!isAdm||!M)return;L().forEach(a=>{const m=a.m==='auto'?M.gm:a.m;a.p=Math.max(.01,a.p*(1+MOOD[m][1]+(Math.random()-.5)*.016));a.h.push(a.p);if(a.h.length>60)a.h.shift()});saveM()},15000);
+
+function renderTop(){$('top').innerHTML=user?`<span class="mu">${esc(isAdm?'АДМИН':(U?U.name:''))}</span> ${U?`<b>${fm(U.cash)}</b>`:''} <button class="btn s" onclick="logout()">Выйти</button>`:`<button class="btn" onclick="authModal()">Войти</button>`}
+function renderNav(){const t=[['market','Рынок'],['port','Портфель'],['p2p','P2P']];if(isAdm)t.push(['admin','Админ']);
+ $('nav').innerHTML=t.map(x=>`<button class="${view===x[0]?'on':''}" onclick="go('${x[0]}')">${x[1]}</button>`).join('')}
+function go(v){view=v;renderNav();({market:showMarket,port:showPort,p2p:showP2P,admin:showAdmin})[v]()}
+function modal(h){$('mb').innerHTML=h;$('md').style.display='flex'}
+function closeModal(){$('md').style.display='none'}
+$('md').onclick=e=>{if(e.target.id==='md')closeModal()};
+function authModal(){modal(`<h3>Вход / регистрация</h3><input id="au" placeholder="Ник (латиница)" autocapitalize="none"><input id="ap" type="password" placeholder="Пароль (от 6 символов)"><p class="mu">Новый игрок получает $10 000. Админ входит здесь же.</p><div class="btns"><button class="btn" onclick="authGo(false)">Войти</button><button class="btn g" onclick="authGo(true)">Регистрация</button></div>`)}
+async function authGo(reg){const n=$('au').value.trim(),p=$('ap').value;
+ if(!/^[a-z0-9_.-]{3,20}$/i.test(n)||p.length<6)return toast('Ник 3–20 латиница, пароль от 6');
+ try{if(reg){if(n.toLowerCase()===ADMIN_NICK)return toast('Ник занят');const c=await createUserWithEmailAndPassword(auth,EM(n),p);await setDoc(doc(db,'users',c.user.uid),{name:n,cash:10000,hold:{}})}
+ else await signInWithEmailAndPassword(auth,EM(n),p);closeModal();toast('Готово')}
+ catch(e){toast(e.code==='auth/email-already-in-use'?'Ник занят':'Неверный ник или пароль')}}
+function logout(){signOut(auth)}
+
+function showMarket(soft){if(!M){$('main').innerHTML='<div class="card">Рынок ещё не запущен. Админ должен войти один раз.</div>';return}
+ if(!soft||!$('cv')){$('main').innerHTML=`<div class="card"><div id="hd"></div><canvas id="cv" width="600" height="140"></canvas></div><div class="card"><input id="qty" type="number" min="0" step="any" value="1"><div class="btns"><button class="btn g" onclick="trade('buy')">Купить</button><button class="btn r" onclick="trade('sell')">Продать</button><button class="btn s" onclick="maxBuy()">Макс</button></div></div><div class="card" id="ls"></div>`}
+ const a=A(cur),ch=(a.p/a.o-1)*100;
+ $('hd').innerHTML=`<b>${esc(a.s)}</b> ${esc(a.n)} <span class="tag">${a.t==='stock'?'акция':'актив'}</span><div style="font-size:24px;font-weight:700" class="${ch>=0?'up':'dn'}">${fm(a.p)} <small>${ch>=0?'+':''}${ch.toFixed(2)}%</small></div>`;
+ chart(a);$('ls').innerHTML=L().map(x=>{const c=(x.p/x.o-1)*100;return`<div class="row" onclick="pick('${x.s}','market')"><div><b>${esc(x.s)}</b><small>${esc(x.n)}</small></div><div style="text-align:right">${fm(x.p)}<small class="${c>=0?'up':'dn'}">${c>=0?'+':''}${c.toFixed(2)}%</small></div></div>`}).join('')}
+function pick(s,v){cur=s;go(v)}
+function chart(a){const c=$('cv'),g=c.getContext('2d'),w=c.width,h=c.height,d=a.h,mn=Math.min(...d),r=(Math.max(...d)-mn)||1;
+ g.clearRect(0,0,w,h);g.lineWidth=2;g.strokeStyle=d[d.length-1]>=d[0]?'#0ecb81':'#f6465d';g.beginPath();
+ d.forEach((v,i)=>{const x=i/Math.max(d.length-1,1)*w,y=h-8-(v-mn)/r*(h-16);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke()}
+async function doTrade(side,sym,q,price){if(!user)return authModal(),false;if(!U)return toast('Загрузка…'),false;
+ if(!(q>0))return toast('Введи количество'),false;const cost=q*price,hold=JSON.parse(JSON.stringify(U.hold||{}));let cash=U.cash;
+ if(side==='buy'){if(cost>cash)return toast('Не хватает средств'),false;cash-=cost;const h=hold[sym]||{q:0,avg:0};h.avg=(h.avg*h.q+cost)/(h.q+q);h.q+=q;hold[sym]=h}
+ else{const h=hold[sym];if(!h||h.q<q-1e-9)return toast('Нет столько в портфеле'),false;h.q-=q;cash+=cost;if(h.q<1e-9)delete hold[sym]}
+ try{await updateDoc(doc(db,'users',user.uid),{cash,hold});toast((side==='buy'?'Куплено ':'Продано ')+q+' '+sym+' за '+fm(cost));return true}catch(e){toast('Ошибка сохранения');return false}}
+function trade(side){doTrade(side,cur,parseFloat($('qty').value),A(cur).p)}
+function maxBuy(){if(U)$('qty').value=Math.floor(U.cash/A(cur).p*100)/100}
+function showPort(){if(!user){$('main').innerHTML='<div class="card">Войди, чтобы видеть портфель.</div>';return}
+  if(!U||!M){$('main').innerHTML='<div class="card">Загрузка…</div>';return}
+ let tot=U.cash;const rows=Object.keys(U.hold||{}).map(s=>{const h=U.hold[s],a=A(s);if(!a)return'';const v=h.q*a.p;tot+=v;const pl=v-h.q*h.avg;
+ return`<div class="row" onclick="pick('${s}','market')"><div><b>${esc(s)}</b><small>${+h.q.toFixed(4)} шт · ср. ${fm(h.avg)}</small></div><div style="text-align:right">${fm(v)}<small class="${pl>=0?'up':'dn'}">${pl>=0?'+':'-'}${fm(Math.abs(pl))}</small></div></div>`}).join('');
+ $('main').innerHTML=`<div class="card"><div class="mu">Всего</div><div style="font-size:26px;font-weight:700">${fm(tot)}</div><div class="mu">Свободно: ${fm(U.cash)}</div></div><div class="card"><h3>Активы и акции</h3>${rows||'<span class="mu">Пока пусто</span>'}</div><button class="btn r" onclick="sellAll()">Продать всё</button>`}
+async function sellAll(){if(!U)return;let c=U.cash;Object.keys(U.hold||{}).forEach(s=>{if(A(s))c+=U.hold[s].q*A(s).p});await updateDoc(doc(db,'users',user.uid),{cash:c,hold:{}});toast('Всё продано')}
+const merch=['CarlJ','Trevor_PH','Franklin','Lamar','Michael_DS','Ron_Jakowski'];
+function showP2P(){if(!M){$('main').innerHTML='<div class="card">Рынок ещё не запущен.</div>';return}const a=A(cur);
+ $('main').innerHTML=`<div class="card"><h3>P2P · ${esc(a.s)} ${esc(a.n)}</h3><select onchange="pick(this.value,'p2p')">${L().map(x=>`<option value="${x.s}" ${x.s===a.s?'selected':''}>${esc(x.s)} — ${esc(x.n)}</option>`).join('')}</select>`+merch.map((m,i)=>{const sp=((i*37)%7+1)/100;return`<div class="row" style="cursor:default"><div><b>${m}</b> <span class="tag">${90+(i*5)%10}%</span><small>Покупает ${fm(a.p*(1-sp))} · Продаёт ${fm(a.p*(1+sp))}</small></div><div class="btns" style="margin:0"><button class="btn g" onclick="p2p('buy',${a.p*(1+sp)})">Купить</button><button class="btn r" onclick="p2p('sell',${a.p*(1-sp)})">Продать</button></div></div>`}).join('')+'</div>'}
+function p2p(side,price){const q=parseFloat(prompt('Количество '+cur+':','1'));if(q)doTrade(side,cur,q,price)}
+
+async function showAdmin(){if(!isAdm||!M)return;
+ $('main').innerHTML=`<div class="card"><h3>Настроение рынка</h3><div class="btns">${Object.keys(MOOD).map(k=>`<button class="btn ${M.gm===k?'':'s'}" onclick="setGM('${k}')">${MOOD[k][0]}</button>`).join('')}</div><p class="mu">Курсы двигаются, пока админ залогинен и страница открыта.</p></div>
+<div class="card"><h3>Курсы</h3>${L().map(a=>`<div style="padding:8px 0;border-bottom:1px solid var(--bd)"><b>${esc(a.s)}</b> ${esc(a.n)} — ${fm(a.p)}<select onchange="setM('${a.s}',this.value)">${Object.keys(MOOD).map(k=>`<option value="${k}" ${a.m===k?'selected':''}>${MOOD[k][0]}</option>`).join('')}</select><div class="btns"><input style="width:120px" id="np_${a.s}" type="number" placeholder="Новая цена"><button class="btn" onclick="setP('${a.s}')">Задать</button><button class="btn s" onclick="pump('${a.s}',1.2)">+20%</button><button class="btn s" onclick="pump('${a.s}',.8)">-20%</button><button class="btn r" onclick="delA('${a.s}')">Удалить</button></div></div>`).join('')}</div>
+<div class="card"><h3>Регистрация актива / акции</h3><input id="rs" placeholder="Тикер (VAP)" maxlength="6"><input id="rn" placeholder="Название"><select id="rt"><option value="stock">Акция</option><option value="asset">Актив</option></select><input id="rp" type="number" placeholder="Начальная цена"><button class="btn" onclick="regA()">Зарегистрировать</button></div>
+<div class="card"><h3>Игроки</h3><div id="ul" class="mu">Загрузка…</div></div>`;
+ try{const s=await getDocs(collection(db,'users'));$('ul').innerHTML=s.docs.map(d=>`<div class="row" style="cursor:default"><span>${esc(d.data().name)}</span><span>${fm(d.data().cash)} <button class="btn s" onclick="give('${d.id}')">+ $</button></span></div>`).join('')||'Нет игроков'}catch(e){$('ul').textContent='Нет доступа (проверь правила)'}}
+function setGM(k){M.gm=k;saveM();showAdmin()}
+function setM(s,k){A(s).m=k;saveM()}
+function setP(s){const v=parseFloat($('np_'+s).value);if(!(v>0))return toast('Введи цену');const a=A(s);a.p=v;a.h.push(v);saveM();showAdmin();toast('Курс изменён')}
+function pump(s,k){const a=A(s);a.p*=k;a.h.push(a.p);saveM();showAdmin()}
+function delA(s){if(confirm('Удалить '+s+'?')){delete M.assets[s];saveM();showAdmin()}}
+function regA(){const s=$('rs').value.trim().toUpperCase(),n=$('rn').value.trim(),p=parseFloat($('rp').value);
+ if(!/^[A-Z0-9]{2,6}$/.test(s)||!n||!(p>0))return toast('Тикер: латиница/цифры, заполни всё');if(A(s))return toast('Тикер уже есть');
+ M.assets[s]={s,n,t:$('rt').value,p,o:p,m:'auto',h:[p]};saveM();showAdmin();toast('Зарегистрировано: '+s)}
+async function give(id){const v=parseFloat(prompt('Сколько $ выдать?','1000'));if(v){await updateDoc(doc(db,'users',id),{cash:increment(v)});showAdmin()}}
+Object.assign(window,{go,authModal,authGo,logout,closeModal,trade,maxBuy,sellAll,p2p,pick,setGM,setM,setP,pump,delA,regA,give});
+renderTop();renderNav();showMarket();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
